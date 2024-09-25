@@ -252,7 +252,7 @@ export class FfmpegOptions {
 
           "-acodec", "libfdk_aac",
           "-afterburner", "1",
-          "-eld_sbr", "1",
+          //"-eld_sbr", "1",
           "-eld_v2", "1"
         ];
       } else {
@@ -673,6 +673,7 @@ export class FfmpegOptions {
 
           videoFilters.push("fps=fps=" + options.fps.toString());
         }
+        videoFilters.push("hwupload=extra_hw_frames=64,format=qsv");
 
         // h264_qsv is the Intel Quick Sync Video hardware encoder API. We use the following options:
         //
