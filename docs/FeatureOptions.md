@@ -63,7 +63,10 @@ These option(s) apply to: all Protect device types.
 | Option                                           | Description
 |--------------------------------------------------|------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 | `Device`                                         | Make this device available in HomeKit. **(default: enabled)**.
-| `Device.StatusLed`                               | Enable the status LED for this device in HomeKit. **(default: disabled)**. <BR>*Supported on Protect devices that have a status LED.*
+| `Device.StatusLed`                               | Enable the status indicator light for this device in HomeKit. **(default: enabled)**. <BR>*Supported on Protect devices that have a status indicator light.*
+| `Device.StatusLed.Switch`                        | Add a switch accessory to control the status indicator light in HomeKit. **(default: disabled)**. <BR>*Supported on Protect devices that have a status indicator light.*
+| `Device.NightVision`                             | Enable the night vision indicator light for this device in HomeKit. **(default: enabled)**. <BR>*Supported on Protect devices that have infrared.*
+| `Device.NightVision.Dimmer`                      | Add a dimmer accessory to control the night vision state in HomeKit. **(default: disabled)**. <BR>*Supported on Protect devices that have infrared.*
 | `Device.Standalone`                              | Make this a standalone device in HomeKit that will need to be added to HomeKit through the Home app. **(default: disabled)**.
 | `Device.SyncName`                                | Synchronize the UniFi Protect name of this device with HomeKit. Synchronization is one-way only, syncing the device name from UniFi Protect to HomeKit. **(default: disabled)**.
 
@@ -137,7 +140,7 @@ These option(s) apply to: Protect cameras.
 | Option                                           | Description
 |--------------------------------------------------|------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 | `Video.Transcode.Hardware`                       | Use hardware-accelerated transcoding when available (Apple Macs, Intel Quick Sync Video-enabled CPUs, Raspberry Pi 4). **(default: disabled)**.
-| `Video.Stream.UseApi`                            | Use the native Protect livestream API to view livestreams (Experimental). **(default: disabled)**.
+| `Video.Stream.UseApi`                            | Use the native Protect livestream API to view livestreams. **(default: enabled)**.
 | `Video.Transcode`                                | When streaming to low-latency clients (e.g. at home), transcode livestreams, instead of transmuxing them. **(default: enabled)**.
 | `Video.Transcode.Bitrate<I>.Value</I>`           | Bitrate, in kilobits per second, to use when transcoding to low-latency (e.g. at home) clients, ignoring the bitrate HomeKit requests. HomeKit typically requests lower video quality than you may desire in your environment. **(default: 2000)**.
 | `Video.Transcode.HighLatency`                    | When streaming to high-latency clients (e.g. cellular connections), transcode livestreams instead of transmuxing them. **(default: enabled)**.
@@ -150,7 +153,7 @@ These option(s) apply to: Protect cameras.
 | `Video.Crop.Y<I>.Value</I>`                      | Top offset of the crop window, as a percentage of the original image height. **(default: 0)**.
 | `Video.Crop.Width<I>.Value</I>`                  | Width of the crop window, as a percentage of original image width. **(default: 100)**.
 | `Video.Crop.Height<I>.Value</I>`                 | Height of the crop window, as a percentage of original image height. **(default: 100)**.
-| `Video.HighResSnapshots`                         | Enable higher quality snapshots using the timeshift buffer or the livestream. **(default: enabled)**.
+| `Video.HighResSnapshots`                         | Enable higher quality snapshots. **(default: enabled)**.
 
 #### <A NAME="video.hksv"></A>HomeKit Secure Video feature options.
 
@@ -158,9 +161,8 @@ These option(s) apply to: Protect cameras.
 
 | Option                                           | Description
 |--------------------------------------------------|------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
-| `Video.HKSV.TimeshiftBuffer`                     | Enable the timeshift buffer for HomeKit Secure Video. **(default: enabled)**.
+| `Video.HKSV.StatusLedIndicator`                  | Use the camera status indicator light to show when an HKSV event is being recorded. **(default: disabled)**.
 | `Video.HKSV.Recording.Switch`                    | Add a switch accessory to enable or disable HKSV event recording. **(default: disabled)**.
-| `Video.HKSV.Recording.MaxDuration<I>.Value</I>`  | Maximum HomeKit Secure Video event duration, in seconds. **(default: 0)**.
 | `Video.HKSV.Record.Only.High`                    | When recording HomeKit Secure Video events, force the use of the high quality video stream from the Protect controller. **(default: disabled)**.
 | `Video.HKSV.Record.Only.Medium`                  | When recording HomeKit Secure Video events, force the use of the medium quality video stream from the Protect controller. **(default: disabled)**.
 | `Video.HKSV.Record.Only.Low`                     | When recording HomeKit Secure Video events, force the use of the low quality video stream from the Protect controller. **(default: disabled)**.
