@@ -2,6 +2,42 @@
 
 All notable changes to this project will be documented in this file. This project uses [semantic versioning](https://semver.org/).
 
+## 7.8.0 (2024-10-14)
+  * Behavior change: hardware acceleration is now enabled by default if it's available and detected as working by HBUP.
+  * Behavior change: the bundled FFmpeg no longer attempts to provide Intel QSV hardware acceleration support due to bugs in the QSV libraries when creating static FFmpeg builds.
+  * Improvement: Intel QSV hardware acceleration support now works with HEVC (Protect calls this enhanced encoding).
+  * Improvement: support for Jellfin FFmpeg builds for use with Intel QSV hardware acceleration. If you want to use Intel QSV hardware acceleration, I recommend either [downloading it for your particular Linux environment from Jellyfin](https://repo.jellyfin.org/?path=/ffmpeg) or [adding the Jellyfin repository to your Linux distribution](https://jellyfin.org/docs/general/installation/linux/#debuntu-debian-ubuntu-and-derivatives-using-apt) and then installing `jellyfin-ffmpeg`. Ensure you specify the location of the Jellyfin FFmpeg version under the Settings | Additional Settings section in the HBUP webUI.
+  * Housekeeping.
+
+## 7.7.1 (2024-10-06)
+  * **Note: FFmpeg v7.1 currently has fatal issues handling H.264 and HEVC decoding in certain scenarios. Unfortunately, this impacts HBUP as well as a lot of software out there. Until further notice, HBUP does not support FFmpeg versions above 7.0.x. If you have no idea what any of this means, that generally means you can ignore all this because things work fine in your environment. 😀**
+  * Housekeeping.
+
+## 7.7.0 (2024-10-02)
+  * Behavior change: HBUP will now ensure HomeKit accessory names are compliant with [HomeKit's naming guidelines](https://developer.apple.com/design/human-interface-guidelines/homekit#Help-people-choose-useful-names). Invalid characters will be replaced with a space, and multiple spaces will be squashed.
+  * Housekeeping.
+
+## 7.6.0 (2024-09-29)
+  * **Note: HBUP now requires Protect v5 as if this release. Prior versions of Protect are no longer supported.**
+  * Behavior change: Protect v5 has significantly changed interactions between doorbell cameras and chimes. As a result of Ubiquiti's changes, Protect chimes cannot have their volume controlled individually any longer. For the time being, it seems Protect's still permitting individual chimes to play unique ringtones and that functionality remains in HBUP. Volume control for Protect chimes attached to Protect doorbells can be enabled by a feature option, allowing you to control the volume across all Protect chimes paired to a particular doorbell.
+  * New feature: Protect doorbell chime support is now available through Protect doorbells. You can find the relevant feature option under the doorbell section in the HBUP webUI.
+  * New feature: third party cameras in Protect via ONVIF are now supported in HBUP, with constraints: there's no motion sensor exposed by the Protect controller, which means HKSV is unavailable to these cameras, as are any unique camera-specific controls.
+  * Housekeeping.
+
+## 7.5.2 (2024-09-28)
+  * **Note: this will likely be the final version of HBUP to support Protect v4. Protect v5 has several breaking changes that I'll be addressing in future updates, most notably in the way Protect chimes now work, making them far less customizable than previously. Stay tuned for those updates.**
+  * Improvement: HKSV performance and error rates should be noticeably improved. Thanks to @rasod for providing some good comparative logs to help me track this down.
+  * Housekeeping.
+
+## 7.5.1 (2024-09-26)
+  * Housekeeping.
+
+## 7.5.0 (2024-09-26)
+  * Behavior change: smart motion detection will now trigger on **both** realtime and near-realtime events, as detected by Protect. Certain activities (e.g. license plate detection) frequently don't occur in realtime, and historically HBUP has ignored these detections in order to be consistent throughout. Given the continued evolution of Protect, it now makes sense to also trigger on these not-quite-realtime events as well - typically, events will be triggered within a few seconds of actual detection within the Protect environment. This change mostly impacts users who use smart object sensors to detect specific types of objects as detected by Protect. Object detection will more directly mirror what's available under the detections view within the Protect controller's webUI.
+  * Improvement: smart motion detection now includes smart audio detection, when supported by Protect. You too can now have a sensor triggered when a baby is crying, a dog is barking, and a car horn is heard - potentially all at once! Functionality has been incorporated into the smart motion detection feature options and smart object sensors.
+  * Improvement: address edge cases where the Protect controller disappears for large periods of time, leading to potential device removal.
+  * Housekeeping.
+
 ## 7.4.0 (2024-09-22)
   * Behavior change: the camera status indicator light feature option now defaults to on. This was always the intended default behavior, but due to bugs that seem to be fixed in iOS 18, we can have our toys back. You can control the status indicator light through the camera details screen in the Home app.
   * New feature: the night vision indicator light is now available in the camera details screen in the Home app. This feature is enabled by default, you can choose to enable or disable it through the HBUP webUI.

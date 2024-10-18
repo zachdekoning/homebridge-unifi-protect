@@ -8,9 +8,9 @@
  */
 import { API, CameraRecordingConfiguration, CameraRecordingDelegate, HAP, HDSProtocolSpecificErrorReason,
   PlatformAccessory, RecordingPacket } from "homebridge";
+import { HomebridgePluginLogging, Nullable } from "homebridge-plugin-utils";
 import { ProtectCamera, RtspEntry } from "./devices/index.js";
 import { FfmpegRecordingProcess } from "./ffmpeg/index.js";
-import { HomebridgePluginLogging } from "homebridge-plugin-utils";
 import { PROTECT_HKSV_TIMESHIFT_BUFFER_MAXDURATION } from "./settings.js";
 import { ProtectNvr } from "./protect-nvr.js";
 import { ProtectTimeshiftBuffer } from "./protect-timeshift.js";
@@ -32,7 +32,7 @@ export class ProtectRecordingDelegate implements CameraRecordingDelegate {
   private nvr: ProtectNvr;
   private readonly protectCamera: ProtectCamera;
   private recordingConfig?: CameraRecordingConfiguration;
-  public rtspEntry: RtspEntry | null;
+  public rtspEntry: Nullable<RtspEntry>;
   public readonly timeshift: ProtectTimeshiftBuffer;
   private timeshiftedSegments: number;
   private transmitListener?: ((segment: Buffer) => void);
@@ -133,6 +133,7 @@ export class ProtectRecordingDelegate implements CameraRecordingDelegate {
   // Handle the actual recording stream request.
   public async *handleRecordingStreamRequest(): AsyncGenerator<RecordingPacket> {
 
+
     // The first transmitted segment in an fMP4 stream is always the initialization segment and contains no video, so we don't count it.
     this.transmittedSegments = 0;
 
@@ -158,15 +159,17 @@ export class ProtectRecordingDelegate implements CameraRecordingDelegate {
       return;
     }
 
-    let previousSegment;
-
     // Process our FFmpeg-generated segments and send them back to HKSV.
     for await (const segment of this.ffmpegStream.segmentGenerator()) {
 
-      // We always want to operate one segment behind.
-      if(!previousSegment) {
+      // If we've not transmitting, we're done.
+      if(!this.isTransmitting) {
 
-        previousSegment = segment;
+        break;
+      }
+
+      // No segment doesn't mean we're done necessarily, but it does mean we need to wait for FFmpeg to catch up.
+      if(!segment) {
 
         continue;
       }
@@ -174,30 +177,17 @@ export class ProtectRecordingDelegate implements CameraRecordingDelegate {
       // Keep track of how many segments we're sending to HKSV.
       this.transmittedSegments++;
 
-      // Send HKSV the previous fMP4 segment.
-      yield { data: previousSegment, isLast: !this.isTransmitting };
-
-      // If we're no longer transmitting, we're done.
-      if(!this.isTransmitting) {
-
-        return;
-      }
-
-      // Set the current segment as the previous one.
-      previousSegment = segment;
+      // Send HKSV the fMP4 segment.
+      yield { data: segment, isLast: false };
     }
 
-    // Close it out cleanly if HomeKit is still expecting us to transmit something and we've ended our FFmpeg session.
-    if(this.isTransmitting || !this.hksvRequestedClose) {
+    // If FFmpeg timed out it's typically due to the quality of the video coming from the Protect controller. Restart the livestream API to see if we can improve things.
+    if(this.ffmpegStream?.isTimedOut) {
 
-      // If FFmpeg timed out, it can be due to what's coming from the Protect controller. Let's try to restart the connection to see if we can improve things.
-      if(this.ffmpegStream?.isTimedOut) {
+      this.timeshift.restart();
 
-        this.timeshift.restart();
-      }
-
-      // Yield the final segment if we have it.
-      yield { data: previousSegment ?? Buffer.alloc(1, 0), isLast: true };
+      // Send HKSV a final segment to cleanly wrap up.
+      yield { data: Buffer.alloc(1, 0), isLast: true };
     }
   }
 
@@ -563,7 +553,7 @@ export class ProtectRecordingDelegate implements CameraRecordingDelegate {
   }
 
   // Return our current HomeKit Secure Video recording configuration.
-  public get recordingConfiguration(): CameraRecordingConfiguration | null {
+  public get recordingConfiguration(): Nullable<CameraRecordingConfiguration> {
 
     return this.recordingConfig ?? null;
   }

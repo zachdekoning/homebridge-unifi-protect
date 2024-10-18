@@ -3,11 +3,11 @@
  * protect-events.ts: Protect events class for UniFi Protect.
  */
 import { API, HAP, Service } from "homebridge";
+import { HomebridgePluginLogging, Nullable } from "homebridge-plugin-utils";
 import { ProtectApi, ProtectEventAdd, ProtectEventMetadata, ProtectEventPacket, ProtectKnownDeviceTypes } from "unifi-protect";
 import { ProtectCamera, ProtectDevice } from "./devices/index.js";
 import { ProtectDeviceConfigTypes, ProtectReservedNames } from "./protect-types.js";
 import { EventEmitter } from "node:events";
-import { HomebridgePluginLogging } from "homebridge-plugin-utils";
 import { PROTECT_DOORBELL_TRIGGER_DURATION } from "./settings.js";
 import { ProtectNvr } from "./protect-nvr.js";
 import { ProtectPlatform } from "./protect-platform.js";
@@ -99,7 +99,7 @@ export class ProtectEvents extends EventEmitter {
   private ufpUpdates(packet: ProtectEventPacket): void {
 
     const payload = packet.payload as ProtectDeviceConfigTypes;
-    let protectDevice: ProtectDevice | null;
+    let protectDevice: Nullable<ProtectDevice>;
 
     switch(packet.header.modelKey) {
 
@@ -247,6 +247,11 @@ export class ProtectEvents extends EventEmitter {
           this.emit("updateEvent." + packet.header.id, packet);
           this.emit("updateEvent." + packet.header.modelKey, packet);
 
+          if("recordId" in packet.header) {
+
+            this.emit("updateEvent." + packet.header.recordId, packet);
+          }
+
           break;
 
         default:
@@ -347,7 +352,7 @@ export class ProtectEvents extends EventEmitter {
       delete this.eventTimers[protectDevice.id];
     }, protectDevice.hints.motionDuration * 1000);
 
-    // If we have an active smart motion contact sensor reset timer, let's cancel it and create a new one.
+    // If we have an active smart detection contact sensor reset timer, let's cancel it and create a new one.
     detectedObjects.map(objectSensor => this.eventTimers[protectDevice.id + ".Motion.SmartDetect.ObjectSensors." + objectSensor] &&
       clearTimeout(this.eventTimers[protectDevice.id + ".Motion.SmartDetect.ObjectSensors." + objectSensor]));
 
@@ -355,11 +360,11 @@ export class ProtectEvents extends EventEmitter {
     for(const detectedObject of detectedObjects.filter(objectSensor => !protectDevice.accessory.getServiceById(this.hap.Service.ContactSensor,
       ProtectReservedNames.CONTACT_MOTION_SMARTDETECT + "." + objectSensor)?.getCharacteristic(this.hap.Characteristic.ContactSensorState).value)) {
 
-      // Trigger smart motion contact sensor, if configured.
+      // Trigger smart detection contact sensor, if configured.
       protectDevice.accessory.getServiceById(this.hap.Service.ContactSensor, ProtectReservedNames.CONTACT_MOTION_SMARTDETECT + "." + detectedObject)
         ?.updateCharacteristic(this.hap.Characteristic.ContactSensorState, true);
 
-      // Publish the smart motion event to MQTT, if the user has configured it.
+      // Publish the smart detection event to MQTT, if the user has configured it.
       this.nvr.mqtt?.publish(protectDevice.ufp.mac, "motion/smart/" + detectedObject, "true");
 
       // Trigger license plate contact sensors, if configured.
@@ -368,7 +373,7 @@ export class ProtectEvents extends EventEmitter {
         protectDevice.accessory.getServiceById(this.hap.Service.ContactSensor, ProtectReservedNames.CONTACT_MOTION_SMARTDETECT_LICENSE + "." +
           metadata.licensePlate.name.toUpperCase())?.updateCharacteristic(this.hap.Characteristic.ContactSensorState, true);
 
-        // Publish the smart motion event to MQTT, if the user has configured it.
+        // Publish the smart detection event to MQTT, if the user has configured it.
         this.nvr.mqtt?.publish(protectDevice.ufp.mac, "motion/smart/" + detectedObject + "/metadata", JSON.stringify(metadata));
       }
 
@@ -387,10 +392,10 @@ export class ProtectEvents extends EventEmitter {
       }
     }
 
-    // Reset smart motion contact sensors, if configured.
+    // Reset smart detection contact sensors, if configured.
     for(const detectedObject of detectedObjects) {
 
-      // Reset our smart motion contact sensors after motionDuration.
+      // Reset our smart detection contact sensors after motionDuration.
       this.eventTimers[protectDevice.id + ".Motion.SmartDetect.ObjectSensors." + detectedObject] = setTimeout(() => {
 
         // Reset our license plate contact sensor, if configured.
@@ -400,11 +405,11 @@ export class ProtectEvents extends EventEmitter {
             metadata.licensePlate.name.toUpperCase())?.updateCharacteristic(this.hap.Characteristic.ContactSensorState, false);
         }
 
-        // Reset our smart motion contact sensor, if configured.
+        // Reset our smart detection contact sensor, if configured.
         protectDevice.accessory.getServiceById(this.hap.Service.ContactSensor, ProtectReservedNames.CONTACT_MOTION_SMARTDETECT + "." + detectedObject)
           ?.updateCharacteristic(this.hap.Characteristic.ContactSensorState, false);
 
-        // Publish the smart motion event to MQTT, if the user has configured it.
+        // Publish the smart detection event to MQTT, if the user has configured it.
         this.nvr.mqtt?.publish(protectDevice.ufp.mac, "motion/smart/" + detectedObject, "false");
 
         protectDevice.log.debug("Resetting smart object motion event.");
@@ -414,7 +419,7 @@ export class ProtectEvents extends EventEmitter {
       }, protectDevice.hints.motionDuration * 1000);
     }
 
-    // If we don't have smart motion detection enabled, or if we do have it enabled and we have a smart motion event that's detected an object of interest, let's process
+    // If we don't have smart detection enabled, or if we do have it enabled and we have a smart detection event that's detected something of interest, let's process
     // our occupancy event updates.
     if(!protectDevice.hints.smartDetect || (protectDevice.hints.smartDetect && detectedObjects.some(x => protectDevice.hints.smartOccupancy.includes(x)))) {
 
@@ -469,7 +474,7 @@ export class ProtectEvents extends EventEmitter {
   }
 
   // Doorbell event processing from UniFi Protect and delivered to HomeKit.
-  public doorbellEventHandler(protectDevice: ProtectCamera, lastRing: number | null): void {
+  public doorbellEventHandler(protectDevice: ProtectCamera, lastRing: Nullable<number>): void {
 
     if(!protectDevice || !lastRing) {
 

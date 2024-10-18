@@ -3,7 +3,7 @@
  * protect-nvr.ts: NVR device class for UniFi Protect.
  */
 import { API, APIEvent, HAP, PlatformAccessory } from "homebridge";
-import { HomebridgePluginLogging, MqttClient, retry, sleep } from "homebridge-plugin-utils";
+import { HomebridgePluginLogging, MqttClient, Nullable, retry, sleep, validateName } from "homebridge-plugin-utils";
 import { PLATFORM_NAME, PLUGIN_NAME, PROTECT_CONTROLLER_REFRESH_INTERVAL, PROTECT_CONTROLLER_RETRY_INTERVAL, PROTECT_M3U_PLAYLIST_PORT } from "./settings.js";
 import { ProtectApi, ProtectCameraConfig, ProtectChimeConfig, ProtectLightConfig, ProtectNvrBootstrap, ProtectNvrConfig, ProtectSensorConfig,
   ProtectViewerConfig } from "unifi-protect";
@@ -25,14 +25,14 @@ export class ProtectNvr {
   public events!: ProtectEvents;
   private featureLog: { [index: string]: boolean };
   private hap: HAP;
-  private liveviews: ProtectLiveviews | null;
+  private liveviews: Nullable<ProtectLiveviews>;
   public logApiErrors: boolean;
   public readonly log: HomebridgePluginLogging;
-  public mqtt: MqttClient | null;
+  public mqtt: Nullable<MqttClient>;
   private name: string;
   public nvrHksvErrors: number;
   public platform: ProtectPlatform;
-  public systemInfo: ProtectNvrSystemInfo | null;
+  public systemInfo: Nullable<ProtectNvrSystemInfo>;
   public ufp: ProtectNvrConfig;
   public ufpApi!: ProtectApi;
   private unsupportedDevices: { [index: string]: boolean };
@@ -134,9 +134,9 @@ export class ProtectNvr {
     this.name = this.config.name ?? (this.ufp.name ?? this.ufp.marketName);
 
     // If we are running an unsupported version of UniFi Protect, we're done.
-    if(!this.ufp.version.startsWith("4.") || this.ufp.version.split(".").map(Number).slice(0, 2).join(".") < "4.1") {
+    if(!this.ufp.version.startsWith("5.") || this.ufp.version.split(".").map(Number).slice(0, 2).join(".") < "5.0") {
 
-      this.log.error("This version of HBUP requires running UniFi Protect v4.1 or above using the official Protect release channel only.");
+      this.log.error("This version of HBUP requires running UniFi Protect v5.0 or above using the official Protect release channel only.");
       this.ufpApi.logout();
 
       return;
@@ -240,7 +240,7 @@ export class ProtectNvr {
   }
 
   // Create instances of Protect device types in our plugin.
-  private addProtectDevice(accessory: PlatformAccessory, device: ProtectDeviceConfigTypes): ProtectDevice | null {
+  private addProtectDevice(accessory: PlatformAccessory, device: ProtectDeviceConfigTypes): Nullable<ProtectDevice> {
 
     if(!accessory || !device) {
 
@@ -341,7 +341,7 @@ export class ProtectNvr {
     // See if we already know about this accessory or if it's truly new. If it is new, add it to HomeKit.
     if((accessory = this.platform.accessories.find(x => x.UUID === uuid)) === undefined) {
 
-      accessory = new this.api.platformAccessory(device.name ?? device.marketName, uuid);
+      accessory = new this.api.platformAccessory(validateName(device.name ?? device.marketName ?? ("Unknown Device" + (device.mac ? " " + device.mac : ""))), uuid);
 
       this.log.info("%s: Adding %s to HomeKit%s.", this.ufpApi.getDeviceName(device), device.modelKey,
         this.hasFeature("Device.Standalone", device) ? " as a standalone device" : "");
@@ -376,7 +376,15 @@ export class ProtectNvr {
   // Discover and sync UniFi Protect devices between HomeKit and the Protect controller.
   private discoverAndSyncAccessories(): boolean {
 
-    if(!this.ufpApi.bootstrap) {
+    // If the Protect controller's not bootstrapped, or it's experiencing a meltdown, we're done.
+    if(!this.ufpApi.bootstrap || this.ufpApi.isThrottled) {
+
+      // Clear out the device removal queue since we can't trust the Protect controller at the moment.
+      if(Object.keys(this.deviceRemovalQueue).length) {
+
+        this.log.info("Communication with the controller has been lost. Clearing out the device removal queue as a precaution until connectivity returns.");
+        this.deviceRemovalQueue = {};
+      }
 
       return false;
     }
@@ -760,7 +768,7 @@ export class ProtectNvr {
   }
 
   // Return the Protect device object based on it's unique device identifier, if it exists.
-  public getDeviceById(deviceId: string): ProtectDevices | null {
+  public getDeviceById(deviceId: string): Nullable<ProtectDevices> {
 
     // Find the device.
     return Object.values(this.configuredDevices).find(device => device.ufp.id === deviceId) ?? null;

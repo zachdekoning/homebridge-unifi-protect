@@ -6,6 +6,7 @@ import { CharacteristicValue, PlatformAccessory, Resolution, Service } from "hom
 import { ProtectCameraChannelConfig, ProtectCameraConfig, ProtectCameraConfigPayload, ProtectEventAdd, ProtectEventPacket } from "unifi-protect";
 import { ProtectReservedNames, toCamelCase } from "../protect-types.js";
 import { LivestreamManager } from "../protect-livestream.js";
+import { Nullable } from "homebridge-plugin-utils";
 import { ProtectDevice } from "./protect-device.js";
 import { ProtectNvr } from "../protect-nvr.js";
 import { ProtectStreamingDelegate } from "../protect-stream.js";
@@ -122,14 +123,10 @@ export class ProtectCamera extends ProtectDevice {
     // Check to see if we have smart motion events enabled on a supported camera.
     if(this.hints.smartDetect) {
 
-      // We deal with smart motion detection options here and save them on the ProtectCamera instance because we're trying to optimize the number of feature option
-      // lookups we do in realtime, when possible. Reading a stream of constant events and having to perform a string comparison through a list of options multiple times
-      // a second isn't an ideal use of CPU cycles, even if you have plenty of them to spare. Instead, we perform that lookup once, here, and set the appropriate option
-      // booleans for faster lookup and use later in event detection.
+      const smartDetectTypes = [...this.ufp.featureFlags.smartDetectAudioTypes, ...this.ufp.featureFlags.smartDetectTypes];
 
       // Inform the user of what smart detection object types we're configured for.
-      this.log.info("Smart motion detection enabled%s.", this.ufp.featureFlags.smartDetectTypes.length ?
-        ": " + this.ufp.featureFlags.smartDetectTypes.sort().join(", ") : "");
+      this.log.info("Smart motion detection enabled%s.", smartDetectTypes.length ? ": " + smartDetectTypes.sort().join(", ") : "");
     }
 
     // Configure accessory information.
@@ -142,7 +139,7 @@ export class ProtectCamera extends ProtectDevice {
     await this.configureAmbientLightSensor();
 
     // Configure the motion sensor.
-    this.configureMotionSensor();
+    this.configureMotionSensor(!this.ufp.isThirdPartyCamera);
 
     // Configure smart motion contact sensors.
     this.configureMotionSmartSensor();
@@ -218,10 +215,13 @@ export class ProtectCamera extends ProtectDevice {
     // Process motion events.
     if(hasProperty(["lastMotion"])) {
 
-      // We only want to process the motion event if we have the right payload, and either HKSV recording is enabled, or HKSV recording is disabled and we have
-      // smart motion events disabled (or a device without smart motion capabilities) since those are handled elsewhere.
+      // We only want to process the motion event if we have either:
+      ///
+      //  - HKSV recording enabled.
+      //  - HKSV recording is disabled and we have smart motion events disabled (or a device without smart motion capabilities) since those are handled elsewhere.
       if(this.stream?.hksv?.isRecording || (!this.stream?.hksv?.isRecording &&
-        (!this.ufp.featureFlags.smartDetectTypes.length || (this.ufp.featureFlags.smartDetectTypes.length && !this.hints.smartDetect)))) {
+        ((!this.ufp.featureFlags.smartDetectAudioTypes.length && !this.ufp.featureFlags.smartDetectTypes.length) ||
+          ((this.ufp.featureFlags.smartDetectAudioTypes.length || this.ufp.featureFlags.smartDetectTypes.length) && !this.hints.smartDetect)))) {
 
         this.nvr.events.motionEventHandler(this);
       }
@@ -231,6 +231,13 @@ export class ProtectCamera extends ProtectDevice {
     if(hasProperty(["lastRing"])) {
 
       this.nvr.events.doorbellEventHandler(this, payload.lastRing as number);
+    }
+
+    // Process smart detection events that have occurred on a non-realtime basis. Generally, this includes audio events and video events that require more analysis by
+    // Protect.
+    if(this.hints.smartDetect && hasProperty(["smartDetectTypes"]) && (payload as ProtectEventAdd).smartDetectTypes.length) {
+
+      this.nvr.events.motionEventHandler(this, (payload as ProtectEventAdd).smartDetectTypes, (payload as ProtectEventAdd).metadata);
     }
 
     // Process camera details updates:
@@ -429,7 +436,7 @@ export class ProtectCamera extends ProtectDevice {
     // Add individual contact sensors for each object detection type, if needed.
     if(this.hints.smartDetectSensors) {
 
-      for(const smartDetectType of this.ufp.featureFlags.smartDetectTypes) {
+      for(const smartDetectType of [...this.ufp.featureFlags.smartDetectAudioTypes, ...this.ufp.featureFlags.smartDetectTypes].sort()) {
 
         if(addSmartDetectContactSensor(this.accessoryName + " " + toCamelCase(smartDetectType),
           ProtectReservedNames.CONTACT_MOTION_SMARTDETECT + "." + smartDetectType, "Unable to add smart motion contact sensor for " + smartDetectType + " detection.")) {
@@ -583,7 +590,7 @@ export class ProtectCamera extends ProtectDevice {
     // Retrieve the camera status light if we have it enabled.
     const statusLight = service?.getCharacteristic(this.hap.Characteristic.CameraOperatingModeIndicator);
 
-    if(!this.hints.ledStatus) {
+    if(!this.hasHksv || !this.hints.ledStatus) {
 
       if(statusLight) {
 
@@ -602,7 +609,7 @@ export class ProtectCamera extends ProtectDevice {
     // Retrieve the night vision indicator if we have it enabled.
     const nightVision = service?.getCharacteristic(this.hap.Characteristic.NightVision);
 
-    if(!this.hints.nightVision) {
+    if(!this.hasHksv || !this.hints.nightVision) {
 
       if(nightVision) {
 
@@ -706,7 +713,7 @@ export class ProtectCamera extends ProtectDevice {
     let cameraChannels = this.ufp.channels.filter(x => x.isRtspEnabled);
 
     // Set the camera and shapshot URLs.
-    const cameraUrl = "rtsps://" + (this.nvr.config.overrideAddress ?? this.ufp.connectionHost) + ":" + this.nvr.ufp.ports.rtsps.toString() + "/";
+    const cameraUrl = "rtsps://" + (this.nvr.config.overrideAddress ?? this.ufp.connectionHost ?? this.nvr.ufp.host) + ":" + this.nvr.ufp.ports.rtsps.toString() + "/";
 
     // Filter out any package camera entries. We deal with those independently in the package camera class.
     cameraChannels = cameraChannels.filter(x => x.name !== "Package Camera");
@@ -893,10 +900,10 @@ export class ProtectCamera extends ProtectDevice {
   // Configure HomeKit Secure Video support.
   private configureHksv(): boolean {
 
-    this.hasHksv = true;
+    this.hasHksv = !this.ufp.isThirdPartyCamera;
 
     // If we have smart motion events enabled, let's warn the user that things will not work quite the way they expect.
-    if(this.hints.smartDetect) {
+    if(this.hasHksv && this.hints.smartDetect) {
 
       this.log.info("WARNING: Smart motion detection and HomeKit Secure Video provide overlapping functionality. " +
         "Only HomeKit Secure Video, when event recording is enabled in the Home app, will be used to trigger motion event notifications for this camera." +
@@ -968,7 +975,7 @@ export class ProtectCamera extends ProtectDevice {
     // Validate whether we should have this service enabled.
     if(!this.validService(this.hap.Service.Lightbulb, () => {
 
-      // Night vision dimmers are disabled by default unless the user enables them and we have the device-specific capabilities to support it.
+      // The night vision dimmer is disabled by default and requires the relevant device-specific capabilities to support it.
       if(!this.ufp.featureFlags.hasInfrared || !this.ufp.featureFlags.hasIcrSensitivity || !this.hasFeature("Device.NightVision.Dimmer")) {
 
         return false;
@@ -1211,7 +1218,8 @@ export class ProtectCamera extends ProtectDevice {
 
       // Grab all the available RTSP channels and return them as a JSON.
       return JSON.stringify(Object.assign({}, ...this.ufp.channels.filter(channel => channel.isRtspEnabled)
-        .map(channel => ({ [channel.name]: "rtsps://" + this.nvr.ufp.host + ":" + this.nvr.ufp.ports.rtsp + "/" + channel.rtspAlias + "?enableSrtp" }))));
+        .map(channel => ({ [channel.name]: "rtsps://" + (this.nvr.config.overrideAddress ?? this.ufp.connectionHost ?? this.nvr.ufp.host) + ":" +
+          this.nvr.ufp.ports.rtsp + "/" + channel.rtspAlias + "?enableSrtp" }))));
     });
 
     // Trigger snapshots when requested.
@@ -1299,7 +1307,7 @@ export class ProtectCamera extends ProtectDevice {
   }
 
   // Find an RTSP configuration for a given target resolution.
-  private findRtspEntry(width: number, height: number, options?: RtspOptions): RtspEntry | null {
+  private findRtspEntry(width: number, height: number, options?: RtspOptions): Nullable<RtspEntry> {
 
     const rtspEntries = options?.rtspEntries ?? this.rtspEntries;
 
@@ -1337,7 +1345,7 @@ export class ProtectCamera extends ProtectDevice {
   }
 
   // Find a streaming RTSP configuration for a given target resolution.
-  public findRtsp(width: number, height: number, options?: RtspOptions): RtspEntry | null {
+  public findRtsp(width: number, height: number, options?: RtspOptions): Nullable<RtspEntry> {
 
     // Create our options JSON if needed.
     options = options ?? {};
@@ -1358,7 +1366,7 @@ export class ProtectCamera extends ProtectDevice {
   }
 
   // Find a recording RTSP configuration for a given target resolution.
-  public findRecordingRtsp(width: number, height: number): RtspEntry | null {
+  public findRecordingRtsp(width: number, height: number): Nullable<RtspEntry> {
 
     return this.findRtspEntry(width, height, { biasHigher: true, default: this.hints.recordingDefault ?? this.stream.ffmpegOptions.recordingDefaultChannel });
   }

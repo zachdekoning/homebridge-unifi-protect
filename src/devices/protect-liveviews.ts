@@ -3,6 +3,7 @@
  * protect-liveviews.ts: Liveviews class for UniFi Protect.
  */
 import { CharacteristicValue, PlatformAccessory } from "homebridge";
+import { Nullable, validateName } from "homebridge-plugin-utils";
 import { PLATFORM_NAME, PLUGIN_NAME } from "../settings.js";
 import { ProtectBase } from "./protect-device.js";
 import { ProtectNvr } from "../protect-nvr.js";
@@ -14,8 +15,8 @@ export class ProtectLiveviews extends ProtectBase {
   private isConfigured: { [index: string]: boolean };
   private isMqttConfigured: boolean;
   private liveviews: ProtectNvrLiveviewConfig[];
-  private securityAccessory: PlatformAccessory | null | undefined;
-  private securitySystem: ProtectSecuritySystem | null;
+  private securityAccessory: Nullable<PlatformAccessory> | undefined;
+  private securitySystem: Nullable<ProtectSecuritySystem>;
 
   // Configure our liveviews capability.
   constructor(nvr: ProtectNvr) {
@@ -84,7 +85,7 @@ export class ProtectLiveviews extends ProtectBase {
       if((this.securityAccessory = this.platform.accessories.find(x => x.UUID === uuid)) === undefined) {
 
         // We will use the NVR MAC address + ".Security" to create our UUID. That should provide the guaranteed uniqueness we need.
-        this.securityAccessory = new this.api.platformAccessory(this.ufpApi.bootstrap.nvr.name, uuid);
+        this.securityAccessory = new this.api.platformAccessory(validateName(this.ufpApi.bootstrap.nvr.name), uuid);
 
         // Register this accessory with homebridge and add it to the platform accessory array so we can track it.
         this.api.registerPlatformAccessories(PLUGIN_NAME, PLATFORM_NAME, [ this.securityAccessory ]);
@@ -184,7 +185,7 @@ export class ProtectLiveviews extends ProtectBase {
 
       if((newAccessory = this.platform.accessories.find(x => x.UUID === uuid)) === undefined) {
 
-        newAccessory = new this.api.platformAccessory(this.ufpApi.bootstrap.nvr.name + " " + viewName, uuid);
+        newAccessory = new this.api.platformAccessory(validateName(this.ufpApi.bootstrap.nvr.name + " " + viewName), uuid);
 
         // Register this accessory with homebridge and add it to the platform accessory array so we can track it.
         this.api.registerPlatformAccessories(PLUGIN_NAME, PLATFORM_NAME, [ newAccessory ]);
