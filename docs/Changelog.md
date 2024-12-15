@@ -2,6 +2,21 @@
 
 All notable changes to this project will be documented in this file. This project uses [semantic versioning](https://semver.org/).
 
+## 7.9.0 (2024-12-08)
+  * New feature: on Protect G4 Doorbell Pro doorbells, the fingerprint and NFC sensors are now available through a contact sensor that gets activated when the doorbell detects a successful authentication. It's disabled by default, available under the doorbell-related feature options section.
+  * New feature: on Protect G4 Doorbell Pro doorbells, the downlight (Protect calls this the flashlight) is now accessible. It has some constraints due to API limitations that make it only crudely accessible: the light is only available when the doorbell believes it's dark, and the light has a delay of up to 25 seconds before it turns off, once you’ve turned it off in HBUP. Aside from that, enjoy! It's enabled by default and can be disabled in the doorbell-related feature options section.
+  * New feature: when streaming a package camera at night, HBUP will turn on the flashlight, similar to the way Protect does so in the native Protect app.
+  * Improvement: minor webUI enhancements.
+  * Behavior change: by default, the device removal delay is now enabled by default. HBUP will wait at least 60 seconds before removing a device that's been removed by the Protect controller. There are a number of Protect controller regressions that seem to cause the sporadic removal and re-addition of devices, this should help curb that. You can revert the prior behavior by simply disabling the feature option.
+  * Fix: addressed a regression with viewing the package camera on G4 Doorbell Pros that changed in Protect controller versions above 5.1.
+  * Housekeeping.
+
+## 7.8.2 (2024-10-20)
+  * Housekeeping.
+
+## 7.8.1 (2024-10-20)
+  * Housekeeping.
+
 ## 7.8.0 (2024-10-14)
   * Behavior change: hardware acceleration is now enabled by default if it's available and detected as working by HBUP.
   * Behavior change: the bundled FFmpeg no longer attempts to provide Intel QSV hardware acceleration support due to bugs in the QSV libraries when creating static FFmpeg builds.
